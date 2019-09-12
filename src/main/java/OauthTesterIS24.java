@@ -26,7 +26,6 @@ import sun.jvm.hotspot.debugger.posix.elf.ELFException;
 public class OauthTesterIS24 { public static void main(String[] args) throws Exception{
 
     OAuthConsumer consumer = new DefaultOAuthConsumer("Streitel-Immobilien-SucheKey", "GKYAbMEDamTVue0P");
-
     OAuthProvider provider = new DefaultOAuthProvider("https://rest.immobilienscout24.de/restapi/security/oauth/request_token", "https://rest.immobilienscout24.de/restapi/security/oauth/access_token", "https://rest.immobilienscout24.de/restapi/security/oauth/confirm_access");
 
     System.out.println("Fetching request token...");
@@ -82,6 +81,7 @@ public class OauthTesterIS24 { public static void main(String[] args) throws Exc
         URL url = new URL("https://rest.immobilienscout24.de/restapi/api/search/v1.0/search/region?realestatetype=apartmentbuy&geocodes=1276003");
 
         HttpURLConnection apiRequest = (HttpURLConnection) url.openConnection();
+        apiRequest.setRequestProperty("Accept","application/json");
 
         consumer.sign(apiRequest);
 
