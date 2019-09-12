@@ -1,0 +1,23 @@
+plugins {
+    id 'java'
+}
+
+group 'fangyi'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    compile group: 'oauth.signpost', name: 'signpost-core', version: '1.2.1.1'
+    compile group: 'oauth.signpost', name: 'signpost-commonshttp4', version: '1.2.1.1'
+    compile group: 'com.jayway.restassured', name: 'json-path', version: '2.4.0'
+    compile group: 'org.json', name: 'json', version: '20190722'
+    compile group: 'org.jdom', name: 'jdom2', version: '2.0.5'
+}
+
+
