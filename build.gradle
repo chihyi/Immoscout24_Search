@@ -18,6 +18,7 @@ dependencies {
     compile group: 'com.jayway.restassured', name: 'json-path', version: '2.4.0'
     compile group: 'org.json', name: 'json', version: '20190722'
     compile group: 'org.jdom', name: 'jdom2', version: '2.0.5'
+    implementation 'com.google.code.gson:gson:2.8.5'
 }
 
 
