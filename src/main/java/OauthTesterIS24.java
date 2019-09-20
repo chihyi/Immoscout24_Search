@@ -2,7 +2,6 @@
 
 import java.io.*;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.ParseException;
 import java.util.Map;
@@ -10,7 +9,6 @@ import java.util.Map;
 import com.google.gson.Gson;
 
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import oauth.signpost.OAuthConsumer;
 import oauth.signpost.OAuthProvider;
@@ -25,18 +23,28 @@ import org.supercsv.cellprocessor.ParseDouble;
 import org.supercsv.cellprocessor.ParseLong;
 import org.supercsv.cellprocessor.constraint.NotNull;
 import org.supercsv.cellprocessor.ift.CellProcessor;
-import org.supercsv.io.CsvBeanReader;
 import org.supercsv.io.CsvMapReader;
-import org.supercsv.io.ICsvBeanReader;
 import org.supercsv.io.ICsvMapReader;
 import org.supercsv.prefs.CsvPreference;
-import sun.jvm.hotspot.debugger.posix.elf.ELFException;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
 
 public class OauthTesterIS24 {
+
+    private static double rentalYieldThreshold = 0.06;
+
+    private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    private static Date creationDateSThreshold;
+
+    static {
+        try {
+            creationDateSThreshold = sdf.parse("2019-09-18");
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+    }
 
     public static void main(String[] args) throws Exception {
 
@@ -48,19 +56,6 @@ public class OauthTesterIS24 {
     }
 
     private static void debugFunc(OAuthConsumer consumer) throws OAuthExpectationFailedException, OAuthCommunicationException, OAuthMessageSignerException, IOException, ParseException {
-        String datetimeString1 = "2019-09-17T11:15:41.000+02:00";
-        String datetimeString2 = "2019-09-18T11:15:41.000+02:00";
-        Date date1=new SimpleDateFormat("yyyy-MM-dd").parse(datetimeString1);
-        Date date2=new SimpleDateFormat("yyyy-MM-dd").parse(datetimeString2);
-        if (date1.compareTo(date2) > 0) {
-            System.out.println("Date1 is after Date2");
-        } else if (date1.compareTo(date2) < 0) {
-            System.out.println("Date1 is before Date2");
-        } else if (date1.compareTo(date2) == 0) {
-            System.out.println("Date1 is equal to Date2");
-        } else {
-            System.out.println("How to get here?");
-        }
 
     }
 
@@ -102,18 +97,18 @@ public class OauthTesterIS24 {
                     // System.out.println("numberOfPages: " + numberOfPages);
 
                     // Search first page
-                    getInterestingObjectFromOnePage(consumer, responseJson, pageSize, numberOfHits, rent);
+                    getInterestingObjectFromOnePage(responseJson, pageSize, rent);
 
                     // Search pages from 2. to the last
                     for (int i = 2; i <= numberOfPages; i++) {
 
                         //System.out.println("page number: " + i);
-                        String urlString = urlCityString + "&pagenumber=" + String.valueOf(i);
+                        String urlString = urlCityString + "&pagenumber=" + i;
 
                         responseJson = gson.fromJson(getResponseString(urlString, consumer), JsonObject.class);
                         pageSize = responseJson.getAsJsonObject("resultlist.resultlist").getAsJsonObject("paging").getAsJsonPrimitive("pageSize").getAsInt();
 
-                        getInterestingObjectFromOnePage(consumer, responseJson, pageSize, numberOfHits, rent);
+                        getInterestingObjectFromOnePage(responseJson, pageSize, rent);
                     }
                 }
             }
@@ -126,61 +121,61 @@ public class OauthTesterIS24 {
 
     }
 
-    private static void getInterestingObjectFromOnePage(OAuthConsumer consumer, JsonObject responseJson, int pageSize, int numberOfHits, double rent) throws OAuthExpectationFailedException, OAuthCommunicationException, OAuthMessageSignerException, IOException, ParseException {
+    private static void getInterestingObjectFromOnePage(JsonObject responseJson, int pageSize, double rent) throws ParseException {
 
-        double rentalYieldThreshold = 0.06, rentalYield;
+        double rentalYield;
         int price, livingSpace, realEstateId;
-        JsonObject realEstate;
+        JsonObject realEstate, resultlistEntry;
+        JsonArray resultlistEntries;
         String creationDateString, houseNumber = "";
         Date creationDate;
 
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-        Date creationDateSThreshold = sdf.parse("2019-09-10");
-
-        if (numberOfHits == 1) {
-            realEstate = responseJson.getAsJsonObject("resultlist.resultlist").getAsJsonArray("resultlistEntries").get(0).getAsJsonObject().getAsJsonObject("resultlistEntry");
-            price = realEstate.getAsJsonObject("resultlist.realEstate").getAsJsonObject("price").getAsJsonPrimitive("value").getAsInt();
-            livingSpace = realEstate.getAsJsonObject("resultlist.realEstate").getAsJsonPrimitive("livingSpace").getAsInt();
-
-            creationDateString = realEstate.getAsJsonPrimitive("@creation").getAsString();
+        //System.out.println("numberOfHits: " + numberOfHits);
+        //System.out.println("pageSize: " + pageSize);
+        if (pageSize == 1) {
+            resultlistEntry = responseJson.getAsJsonObject("resultlist.resultlist").getAsJsonArray("resultlistEntries").get(0).getAsJsonObject().getAsJsonObject("resultlistEntry");
+            realEstate = resultlistEntry.getAsJsonObject("resultlist.realEstate");
+            creationDateString = resultlistEntry.getAsJsonPrimitive("@creation").getAsString();
             creationDate = new SimpleDateFormat("yyyy-MM-dd").parse(creationDateString);
+            realEstateId = resultlistEntry.getAsJsonPrimitive("realEstateId").getAsInt();
 
-            if (realEstate.getAsJsonObject("resultlist.realEstate").getAsJsonObject("address").has("houseNumber")){
-                houseNumber = realEstate.getAsJsonObject("resultlist.realEstate").getAsJsonObject("address").getAsJsonPrimitive("houseNumber").getAsString();
+            if (checkCriteria(realEstate, realEstateId, rent, creationDate)){
+                outputResult(realEstateId, creationDate);
             }
-
-            rentalYield = calcRentalYield(livingSpace, price, rent);
-
-            if (rentalYield > rentalYieldThreshold && creationDate.compareTo(creationDateSThreshold) > 0 && !houseNumber.contains("XXXX") && price > 1000) {
-                realEstateId = realEstate.getAsJsonPrimitive("realEstateId").getAsInt();
-                String realEstateUrl = "https://www.immobilienscout24.de/expose/" + String.valueOf(realEstateId);
-                System.out.println(realEstateUrl + "    " + creationDate);
-            }
-        } else if (numberOfHits > 1) {
-            JsonArray resultlistEntry = responseJson.getAsJsonObject("resultlist.resultlist").getAsJsonArray("resultlistEntries").get(0).getAsJsonObject().getAsJsonArray("resultlistEntry");
+        } else {
+            resultlistEntries = responseJson.getAsJsonObject("resultlist.resultlist").getAsJsonArray("resultlistEntries").get(0).getAsJsonObject().getAsJsonArray("resultlistEntry");
             for (int i = 0; i < pageSize; i++) {
-                realEstate = resultlistEntry.get(i).getAsJsonObject().getAsJsonObject("resultlist.realEstate");
-                price = realEstate.getAsJsonObject("price").getAsJsonPrimitive("value").getAsInt();
-                livingSpace = realEstate.getAsJsonPrimitive("livingSpace").getAsInt();
-
-                creationDateString = resultlistEntry.get(i).getAsJsonObject().getAsJsonPrimitive("@creation").getAsString();
+                realEstate = resultlistEntries.get(i).getAsJsonObject().getAsJsonObject("resultlist.realEstate");
+                creationDateString = resultlistEntries.get(i).getAsJsonObject().getAsJsonPrimitive("@creation").getAsString();
                 creationDate = new SimpleDateFormat("yyyy-MM-dd").parse(creationDateString);
+                realEstateId = resultlistEntries.get(i).getAsJsonObject().getAsJsonPrimitive("realEstateId").getAsInt();
 
-                if (realEstate.getAsJsonObject("address").has("houseNumber")){
-                    houseNumber = realEstate.getAsJsonObject("address").getAsJsonPrimitive("houseNumber").getAsString();
-                }
-
-                rentalYield = calcRentalYield(livingSpace, price, rent);
-
-                if (rentalYield > rentalYieldThreshold && creationDate.compareTo(creationDateSThreshold) > 0 && !houseNumber.contains("XXXX") && price > 1000) {
-                    realEstateId = resultlistEntry.get(i).getAsJsonObject().getAsJsonPrimitive("realEstateId").getAsInt();
-                    String realEstateUrl = "https://www.immobilienscout24.de/expose/" + String.valueOf(realEstateId);
-                    System.out.println(realEstateUrl + "    " + creationDate);
-
+                if (checkCriteria(realEstate, realEstateId, rent, creationDate)){
+                    outputResult(realEstateId, creationDate);
                 }
             }
         }
+    }
 
+    private static void outputResult(int realEstateId, Date creationDate){
+        String realEstateUrl = "https://www.immobilienscout24.de/expose/" + realEstateId;
+        System.out.println(realEstateUrl + "    " + creationDate);
+    }
+
+    private static boolean checkCriteria(JsonObject realEstate, int realEstateId, double rent, Date creationDate){
+        String houseNumber = "";
+        int price = realEstate.getAsJsonObject("price").getAsJsonPrimitive("value").getAsInt();
+        int livingSpace = realEstate.getAsJsonPrimitive("livingSpace").getAsInt();
+
+        if (realEstate.getAsJsonObject("address").has("houseNumber")){
+            houseNumber = realEstate.getAsJsonObject("address").getAsJsonPrimitive("houseNumber").getAsString();
+        }
+
+        double rentalYield = calcRentalYield(livingSpace, price, rent);
+
+        boolean satisfied = (rentalYield > rentalYieldThreshold && creationDate.compareTo(creationDateSThreshold) > 0 && !houseNumber.contains("XXXX") && price > 1000);
+
+        return satisfied;
     }
 
     private static double calcRentalYield(int livingSpace, int price, double rent) {
